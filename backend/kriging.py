@@ -6,7 +6,7 @@ utilizado pelo aplicativo original:
     Krig(cnd, media, lambda=lambda)
 
 com as configurações padrão relevantes:
-    - covariância exponencial;
+    - covariância exponencial, padrão de fields::stationary.cov no Krig;
     - aRange = 1 para a interpolação normal;
     - m = 2, portanto tendência 1 + longitude + latitude;
     - pesos unitários;
@@ -19,9 +19,9 @@ Para a consistência espacial o aplicativo original usa:
 No ``fields``, theta é o antigo nome do parâmetro aRange. Portanto,
 nessa etapa usamos aRange=15.
 
-A álgebra abaixo segue o ``Krig.engine.fixed``: K + lambda/weights na
-diagonal, decomposição de Cholesky, GLS para os coeficientes da tendência
-e solução dos coeficientes espaciais.
+A álgebra abaixo segue o ``Krig.engine.fixed``: covariância exponencial,
+lambda/weights na diagonal, decomposição de Cholesky,
+GLS para os coeficientes da tendência e solução dos coeficientes espaciais.
 """
 
 import numpy as np
@@ -34,12 +34,23 @@ from scipy.spatial.distance import cdist
 # Covariância
 # ---------------------------------------------------------------------------
 
-def cov_exponencial(x1, x2=None, a_range=1.0):
-    """Retorna exp(-distância/aRange), como fields::Exponential."""
+def cov_fields(x1, x2=None, a_range=1.0):
+    """Covariância exponencial padrão de fields::stationary.cov.
+
+    stationary.cov usa Covariance="Exponential" por padrão no Krig:
+    C(h) = exp(-h/aRange). O parâmetro theta legado é tratado como aRange.
+    """
+    if not np.isfinite(a_range) or float(a_range) <= 0:
+        raise ValueError("aRange deve ser positivo e finito.")
     x1 = np.asarray(x1, dtype=float)
     x2 = x1 if x2 is None else np.asarray(x2, dtype=float)
     d = cdist(x1, x2, metric="euclidean")
     return np.exp(-d / float(a_range))
+
+
+def cov_exponencial(x1, x2=None, a_range=1.0):
+    """Alias de compatibilidade para a covariância padrão de Krig."""
+    return cov_fields(x1, x2, a_range)
 
 
 # ---------------------------------------------------------------------------
@@ -110,8 +121,8 @@ def ajustar_krig(xy, valores, lambda_, a_range):
     # T = 1 + x + y
     T = matriz_tendencia(xy)
 
-    # K é a matriz da covariância exponencial.
-    K = cov_exponencial(xy, a_range=a_range)
+    # K é a covariância exponencial padrão de fields::stationary.cov.
+    K = cov_fields(xy, a_range=a_range)
 
     # Exatamente a matriz M formada em Krig.engine.fixed:
     #     diag(lambda / weightsM) + K
@@ -158,18 +169,17 @@ def ajustar_krig(xy, valores, lambda_, a_range):
 # ---------------------------------------------------------------------------
 
 def estimar_lambda_gcv(xy, valores, a_range=15.0):
-    """Estima lambda por GCV quando o R omite lambda em Krig(...).
+    """Mantido por compatibilidade; não é usado no fluxo equivalente ao R.
 
-    A estimativa é uma aproximação numérica ao procedimento de fields::Krig.
-    Mantém o mesmo kernel exponencial, tendência linear e tratamento de
-    coordenadas repetidas usado pelo ajuste principal.
+    O fields::Krig usado no app.R tem lambda padrão igual a zero quando
+    lambda não é informado. Não se deve substituir isso por um GCV próprio.
     """
     xy, y, pesos = colapsar_replicatas(xy, valores, digits=8)
     if len(xy) < 3:
         raise ValueError("São necessárias pelo menos 3 PCDs para estimar lambda.")
 
     T = matriz_tendencia(xy)
-    K = cov_exponencial(xy, a_range=a_range)
+    K = cov_fields(xy, a_range=a_range)
     n = len(y)
     I = np.eye(n)
 
@@ -194,25 +204,36 @@ def estimar_lambda_gcv(xy, valores, a_range=15.0):
         except (np.linalg.LinAlgError, ValueError):
             return np.inf
 
-    # Busca em escala logarítmica. O intervalo cobre suavização muito baixa
-    # até alta; o mínimo é refinado pelo otimizador escalar.
-    grid = np.linspace(-8.0, 4.0, 25)
+    # Busca em escala logarítmica mais fina do que a implementação anterior.
+    # fields::Krig usa GCV quando lambda não é fornecido. Incluímos lambda=0
+    # como candidato explícito, pois o ótimo pode estar no limite do domínio.
+    grid = np.linspace(-12.0, 6.0, 181)
     scores = np.array([score(v) for v in grid])
     finite = np.isfinite(scores)
-    if not finite.any():
+    candidates = [(float(scores[i]), float(10.0 ** grid[i]))
+                  for i in range(len(grid)) if finite[i]]
+
+    score_zero = score(-30.0)
+    if np.isfinite(score_zero):
+        candidates.append((float(score_zero), 0.0))
+
+    if not candidates:
         return 0.0
-    best = int(np.nanargmin(np.where(finite, scores, np.inf)))
-    lo = grid[max(0, best - 1)]
-    hi = grid[min(len(grid) - 1, best + 1)]
-    if lo == hi:
-        return float(10.0 ** grid[best])
-    result = minimize_scalar(
-        score, bounds=(float(lo), float(hi)), method="bounded",
-        options={"xatol": 0.05, "maxiter": 20},
-    )
-    if not result.success or not np.isfinite(result.fun):
-        return float(10.0 ** grid[best])
-    return float(10.0 ** result.x)
+
+    best_score, best_lambda = min(candidates, key=lambda item: item[0])
+    best_idx = int(np.nanargmin(np.where(finite, scores, np.inf)))
+    lo = grid[max(0, best_idx - 1)]
+    hi = grid[min(len(grid) - 1, best_idx + 1)]
+    if lo < hi:
+        result = minimize_scalar(
+            score, bounds=(float(lo), float(hi)), method="bounded",
+            options={"xatol": 1e-7, "maxiter": 200},
+        )
+        if result.success and np.isfinite(result.fun):
+            refined_lambda = float(10.0 ** result.x)
+            if result.fun < best_score:
+                best_score, best_lambda = float(result.fun), refined_lambda
+    return best_lambda
 
 
 # ---------------------------------------------------------------------------
@@ -229,7 +250,7 @@ def interpolar(xy, valores, grid_xy, lambda_=0.0, a_range=1.0):
 
     # Parte polinomial + parte espacial.
     pred = matriz_tendencia(grid_xy) @ d
-    pred += cov_exponencial(grid_xy, xy_fit, a_range=a_range) @ c
+    pred += cov_fields(grid_xy, xy_fit, a_range=a_range) @ c
 
     # O app.R faz result[result < 0] <- 0 imediatamente após predict().
     return np.maximum(pred, 0.0)
@@ -255,6 +276,9 @@ def indice_celula(x, y, xs, ys):
 
 def valores_nas_celulas(xy, raster, xs, ys):
     """Obtém para cada PCD o valor da célula equivalente ao cellFromXY()."""
+    # A sequência de predict() corresponde à ordem x mais rápida e y crescente
+    # de make.surface.grid(). Mantemos essa ordem para consultar a mesma célula
+    # da grade usada na predição.
     arr = np.asarray(raster, dtype=float).reshape(len(ys), len(xs))
     saida = np.full(len(xy), np.nan, dtype=float)
 
@@ -285,8 +309,8 @@ def consistencia(xy, valores, grid_xy, xs, ys, lambda_, threshold, mascara=None)
     if not 0.0 <= float(threshold) <= 100.0:
         raise ValueError("O threshold deve estar entre 0 e 100 (%).")
 
-    # 1. Equivale a Krig(cnd, media, theta=15): lambda é estimado
-    # automaticamente pelo critério GCV, em vez de ser fixado em zero.
+    # 1. Equivale a Krig(cnd, media, theta=15). O R omite lambda;
+    # fields::Krig seleciona lambda pelo GCV por padrão.
     lambda_aux = estimar_lambda_gcv(xy, valores, a_range=15.0)
     previsto_grid = interpolar(
         xy, valores, grid_xy,
