@@ -1,0 +1,12 @@
+name: PCDsCemaden
+title: PCDsCemaden
+username: kleberrocha
+account: kleberrocha
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 16392444
+bundleId: 11439612
+url: https://kleberrocha.shinyapps.io/PCDsCemaden/
+version: 1
+asMultiple: FALSE
+asStatic: FALSE

@@ -1,15 +1,13 @@
+# Configurações e segredos locais
 .env
+.env.*
+!.env.example
+.Renviron
+.secrets/
+*tokenPed.txt
+*.pem
+*.key
 
-/venv/*
-
-/data/*
-
-/frontend/node_modules/*
-
-/frontend/build/*
-
-/frontend/.next/*
-
-/backend/.env
-
-/backend/venv/*
+# Cache/downloads locais gerados pela aplicação
+.cache/
+output/
