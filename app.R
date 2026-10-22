@@ -213,13 +213,46 @@ ui <- dashboardPage(
   ),
   dashboardBody(
     
+    tags$head(
+      tags$style(HTML("#menuBacia { display:none; position:fixed; z-index:99999; background:#fff; border:1px solid #bbb; box-shadow:0 2px 6px rgba(0,0,0,.25); padding:7px 12px; cursor:pointer; font-size:14px; } #menuBacia:hover { background:#f2f2f2; }")),
+      tags$script(HTML("
+        $(document).on('shiny:connected', function() {
+          var menu = $('#menuBacia');
+          if (!menu.length) {
+            menu = $('<div id=\"menuBacia\">Desenhar bacia</div>').appendTo('body');
+          }
+          var ponto = null;
+          ['mapaSimples', 'mapaCons'].forEach(function(id) {
+            var aguardarMapa = function() {
+              var widget = HTMLWidgets.find('#' + id);
+              if (!widget || !widget.getMap) { setTimeout(aguardarMapa, 300); return; }
+              var mapa = widget.getMap();
+              mapa.on('contextmenu', function(e) {
+                ponto = { lat: e.latlng.lat, lng: e.latlng.lng, mapa: id };
+                menu.css({ left: e.originalEvent.clientX + 'px', top: e.originalEvent.clientY + 'px' }).show();
+              });
+            };
+            aguardarMapa();
+          });
+          $(document).on('click', function(e) {
+            if (!$(e.target).closest('#menuBacia').length) menu.hide();
+          });
+          menu.on('click', function(e) {
+            e.stopPropagation();
+            if (ponto) Shiny.setInputValue(ponto.mapa + '_desenhar_bacia', ponto, {priority:'event'});
+            menu.hide();
+          });
+        });
+      "))
+    ),
+
     tabItems(
       tabItem("pData",
               fluidRow( 
                 column(width = 7,
                        box(width = NULL, solidHeader = TRUE,
                            tags$p(
-                             "Clique com o botão esquerdo no mapa para desenhar a bacia hidrográfica e os rios a montante.",
+                             "Clique com o botão direito no mapa e selecione “Desenhar bacia” para delimitar a bacia hidrográfica e os rios a montante.",
                              style = "color: #555; margin: 4px 0 8px 0;"
                            ),
                            leafletOutput("mapaSimples", height = 800) %>% withSpinner(type = 1, color = "#2596be"),
@@ -248,7 +281,7 @@ ui <- dashboardPage(
                 column(width = 7,
                        box(width = NULL, solidHeader = TRUE,
                            tags$p(
-                             "Clique com o botão esquerdo no mapa para desenhar a bacia hidrográfica e os rios a montante.",
+                             "Clique com o botão direito no mapa e selecione “Desenhar bacia” para delimitar a bacia hidrográfica e os rios a montante.",
                              style = "color: #555; margin: 4px 0 8px 0;"
                            ),
                            leafletOutput("mapaCons", height = 800) %>% withSpinner(type = 1, color = "#2596be"),
@@ -1065,7 +1098,7 @@ server <- function(input, output, session) {
   
  
   ############################################################################
-  # Delimitação de bacias no clique esquerdo dos mapas.
+  # Delimitação de bacias pelo menu do botão direito.
   # A função R consulta a API Global Watersheds e reutiliza GeoJSONs em cache local.
   desenhar_bacia <- function(map_id, click) {
     if (is.null(click) || is.null(click$lat) || is.null(click$lng) ||
@@ -1158,12 +1191,12 @@ server <- function(input, output, session) {
     invisible(NULL)
   }
 
-  observeEvent(input$mapaSimples_click, {
-    desenhar_bacia("mapaSimples", input$mapaSimples_click)
+  observeEvent(input$mapaSimples_desenhar_bacia, {
+    desenhar_bacia("mapaSimples", input$mapaSimples_desenhar_bacia)
   }, ignoreInit = TRUE)
 
-  observeEvent(input$mapaCons_click, {
-    desenhar_bacia("mapaCons", input$mapaCons_click)
+  observeEvent(input$mapaCons_desenhar_bacia, {
+    desenhar_bacia("mapaCons", input$mapaCons_desenhar_bacia)
   }, ignoreInit = TRUE)
 
 
