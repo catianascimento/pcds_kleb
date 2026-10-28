@@ -936,13 +936,50 @@ server <- function(input, output, session) {
                        layerId = dadosUsed()$Codigo) %>%
       
       leaflet::addLegend(pal = paletteDin(), values = intervalsBreaks(), title = "[mm]", opacity = 1, group = group_interpol) %>%
+     
+      addCircleMarkers(
+        lng = 0,
+        lat = 0,
+        radius = 0,
+        stroke = FALSE,
+        opacity = 0,
+        fillOpacity = 0,
+        group = "Bacia hidrográfica",
+        layerId = "placeholder-bacia"
+      ) %>%
       
+      addCircleMarkers(
+        lng = 0,
+        lat = 0,
+        radius = 0,
+        stroke = FALSE,
+        opacity = 0,
+        fillOpacity = 0,
+        group = "Rios a montante",
+        layerId = "placeholder-rios"
+      ) %>%
       
     # Controle de layers - Radares e fundos
+    #addLayersControl(
+    #  baseGroups = c("OpenStreetMaps"),
+    #   overlayGroups = c("Mun. Monitorados", group_telem, group_interpol, "Limites"),
+    #  options = layersControlOptions(collapsed = FALSE, position = c("bottomright"))
+    #) %>%
+      
     addLayersControl(
-      baseGroups = c("OpenStreetMaps"),
-       overlayGroups = c("Mun. Monitorados", group_telem, group_interpol, "Limites"),
-      options = layersControlOptions(collapsed = FALSE, position = c("bottomright"))
+      baseGroups = c("OpenStreetMap"),
+      overlayGroups = c(
+        "Mun. Monitorados",
+        group_telem,
+        group_interpol,
+        "Limites",
+        "Bacia hidrográfica",
+        "Rios a montante"
+      ),
+      options = layersControlOptions(
+        collapsed = FALSE,
+        position = "bottomright"
+      )
     ) %>%
     
     # addLogo(
@@ -999,10 +1036,26 @@ server <- function(input, output, session) {
       
       
       # Controle de layers - Radares e fundos
+      #addLayersControl(
+      #  baseGroups = c("OpenStreetMaps"),
+      #  overlayGroups = c("Mun. Monitorados", group_telem, group_telem_cor, group_interpol, "Limites"),
+      #  options = layersControlOptions(collapsed = FALSE, position = c("bottomright"))
+      #) %>%
       addLayersControl(
-        baseGroups = c("OpenStreetMaps"),
-        overlayGroups = c("Mun. Monitorados", group_telem, group_telem_cor, group_interpol, "Limites"),
-        options = layersControlOptions(collapsed = FALSE, position = c("bottomright"))
+        baseGroups = c("OpenStreetMap"),
+        overlayGroups = c(
+          "Mun. Monitorados",
+          group_telem,
+          group_telem_cor,
+          group_interpol,
+          "Limites",
+          "Bacia hidrográfica",
+          "Rios a montante"
+        ),
+        options = layersControlOptions(
+          collapsed = FALSE,
+          position = "bottomright"
+        )
       ) %>%
       
       # addLogo(

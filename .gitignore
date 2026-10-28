@@ -8,6 +8,11 @@
 *.pem
 *.key
 
-# Cache/downloads locais gerados pela aplicação
+# Cache e arquivos gerados localmente
 .cache/
 output/
+.RData
+.Rhistory
+
+# Dados: ignorar por padrão e liberar os arquivos necessários
+data/*
